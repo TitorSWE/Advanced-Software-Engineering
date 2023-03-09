@@ -13,14 +13,16 @@ supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJl
 
 client = create_client(supabaseURL, supabaseKey)
 
-query = "Top-Gun Maverick lang:fr -filter:retweets"
-limit = 20
+query = "Asterix lang:fr "
+limit = 200
 
 tweets = scraperTwitter.get_tweets(query, limit)
-
+print("Importation terminée : "+ str(len(tweets)) + " tweets trouvés")
+count=0
 for tweet in tweets:
-    print(tweet)
     tweet = scraperTwitter.create_JSON(tweet)
     supabaseWriter.write_row(tweet)
+    count+=1
+    print( "Tweet " + str(count) + " / " + str(len(tweets)) + " importé")
 
 ##supabaseWriter.delete_all_rows("tweets")

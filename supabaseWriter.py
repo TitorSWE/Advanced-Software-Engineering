@@ -7,12 +7,12 @@ supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJl
 # Create a client with the URL for your database and an anon API key
 client = create_client(supabaseURL, supabaseKey)
 
-tweetTest = [{"username": "elonmusk", "content" :"Coucou test","likeCount": 0,"replyCount": 2,"retweetCount": 3,"quoteCount": 4}]
+tweetTest = [{"username": "elonmusk", "content" :"Coucou test","likeCount": 0,"replyCount": 2,"retweetCount": 3,"quoteCount": 4, "date": "2021-06-30T15:00:00+00:00"}]
 
 # Write a row into the tweets table
 def write_row(tweet):
     response = client.from_("tweets").insert(tweet).execute()
-    print(response)
+    
 
 
 #delete all the rows of the database
