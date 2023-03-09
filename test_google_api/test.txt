@@ -1,0 +1,150 @@
+#!/usr/bin/env python
+
+from math import *
+
+import rospy
+from sensor_msgs.msg import LaserScan
+import numpy as np
+from geometry_msgs.msg import Twist
+
+R = 0.30 # 30cm : demi-largeur du robot
+
+######## Variables globales ########
+
+GlobalSensorsTab = [] # tableau roulant des entres du callback transformees en valeur de capteur pour le Braitenberg
+GlobalCounter = 0 # compteur des entrees dans GlobalRangesTab
+
+####################################	
+
+
+def controler():
+    
+    print(GlobalCounter)
+
+    # Convertit les donnes brutes du LIDAR en 7 capteurs virtuels (1 devant et 3 de chaque ct : e0 a e7) en faisant des moyennes SPATIALES
+    #
+    # @param rangesTab : un tableau qui contient des tableaux ranges (points du LIDAR)
+    def rangesToSensorsConverter(ranges):
+        
+        lengthRanges = len(ranges)
+        indiceZero = lengthRanges//2 # indice de la mesure d'angle 0 (au milieu de tableau car le LIDAR prend les mesures de -pi a pi)
+        
+        nbPointsSensor = lengthRanges//360*9 # nombre de points sur lesquels on fait une moyenne tous les 20 degrs = nombre de points qui participent  un capteur
+        sensorsTab = [] # tableau des capteurs e0  e7
+
+        ### Calcul des moyennes spatiales pour les 7 capteurs ###
+
+        # calcul de e0 (pour le capteur devant)
+        sumPoints = 0
+        for j in range(nbPointsSensor):
+            sumPoints += ranges[indiceZero - j]
+            sumPoints += ranges[indiceZero + j]
+        sensorsTab.append(sumPoints/nbPointsSensor) # on met la moyenne des distances
+        
+        # calcul de e1, e2, e3 (les 3 capteurs sur la droite)
+        for i in range(10):
+            sumPoints = 0
+            for j in range(nbPointsSensor):
+                sumPoints += ranges[indiceZero + i*nbPointsSensor + j] # list out of range
+            sensorsTab.append(sumPoints/nbPointsSensor)
+
+        # calcul de e4, e5, e6 (les 3 capteurs sur la gauche)
+        for i in range(10):
+            sumPoints = 0
+            for j in range(nbPointsSensor):
+                sumPoints += ranges[indiceZero - i*nbPointsSensor - j]
+            sensorsTab.append(sumPoints/nbPointsSensor)
+            
+        ### ############################################### ###    
+        
+        return sensorsTab
+        
+
+
+
+    def braitenberg2(sensorsTab) : 
+        
+        #nbSensorsTab = len(sensorsTab) # le nombre de tableaux de capteurs en entre
+        nbSensorsPerTab = len(sensorsTab) # le nombre de capteurs pour une mesure temporelle
+        #meanSensorTab = [0 for i in range(nbSensorsPerTab)] # tableau des capteurs contenant la moyenne temporelle pour chaque capteur
+        
+        # Moyenne temporelle sur les nbSensorsTab :
+        # On fait la somme sur chaque capteur des valeurs sur toutes les mesures (entres de sensorTab)
+        # On divise par le nombre de mesures
+        
+        #for i in range(nbSensorsPerTab):
+        #    for j in range(nbSensorsTab) :
+        #        meanSensorTab[i] += sensorsTab[j][i]
+        #for i in range(nbSensorsPerTab):
+        #    meanSensorTab[i] = meanSensorTab[i]/nbSensorsTab
+        
+        
+        ## Traitement des donnees (donc sur les moyennes spatiales et temporelles)
+
+        if sensorsTab[0] < 0.8 :
+	    rospy.loginfo(sensorsTab[0])
+	    rospy.loginfo("STOP")
+	    return(-0.35, 0)
+
+        sidesSensors = sensorsTab[1:nbSensorsPerTab]
+        valueSensors = [max(0, 1.2 - sidesSensors[i]) for i in range(nbSensorsPerTab - 1)]  # frein lineaire par rapport a la distance
+        rospy.loginfo(sidesSensors)
+
+
+        ## Analyse
+
+        poidsCapteurs = np.array([[0.19, 0.17, 0.15, 0.13, 0.11, 0.09, 0.07, 0.05, 0.03, 0.01, -0.19, -0.17, -0.15, -0.13, -0.11, -0.09, -0.07, -0.05, -0.03, -0.01], 
+                                [-0.19, -0.17, -0.15, -0.13, -0.11, -0.09, -0.07, -0.05, -0.03, -0.01, 0.19, 0.17, 0.15, 0.13, 0.11, 0.09, 0.07, 0.05, 0.03, 0.01]])
+        valeursCapteurs = np.array(valueSensors)
+	
+        Vitesses = poidsCapteurs.dot(valeursCapteurs)
+        V = (Vitesses[0] + Vitesses[1])/2   # vitesse[0] == -vitesse[1] strictement donc V = 0
+        TetaP = 0.75*(Vitesses[1] - Vitesses[0])/(2*R)
+
+        return (V, TetaP) 
+
+
+    
+    def callback_scan(msg):
+        #print("coucou tab") 
+        #print(tab)
+        #rospy.loginfo(msg.ranges)
+        global GlobalCounter
+        global GlobalSensorsTab
+
+
+        sensorTab = rangesToSensorsConverter(msg.ranges)
+
+        (V,ThetaP) = braitenberg2(sensorTab)
+      
+        rospy.loginfo((V,ThetaP))    
+        move.linear.x =  V + 0.35
+        move.angular.z = ThetaP # turn left if it is positive, right if negative, unity rad/s
+
+        pub.publish(move)
+        
+        rate.sleep() 
+        
+        
+
+    ############# ROS set-up #############
+
+    ## initialisation noeud
+    rospy.init_node('controler', anonymous=True) 
+
+    ## initialisation sub
+    #print("hello sub")
+    rospy.Subscriber("/scan", LaserScan, callback_scan)
+    #rospy.Subscriber("cmd_vel", Twist, callback_vel)
+
+    ## initialisation pub  
+    pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+    rate = rospy.Rate(20) # 10hz
+    move = Twist() 
+
+    ####################################
+    
+    rospy.spin()
+
+controler()
+
